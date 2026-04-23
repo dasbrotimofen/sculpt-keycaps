@@ -16,3 +16,7 @@ Now you can turn all your ideas into reality and take your keyboard’s comfort 
 Just open the .py file, enter the required parameters, and get a ready‑to‑print model. After rendering, you can export an STL file ready for printing, or a STEP file to make manual edits or work with the bodies separately. 
  
 The code generates not only the keycaps themselves, but also easily removable supports that do not damage the appearance of the finished parts. You can place the models directly on the 3D‑printer bed at the optimal angle for printing, ensuring maximum quality.
+
+## How to open the files
+
+These scripts are designed to be used with **[jmwright‑CQ‑Editor](https://github.com/jdegenstein/jmwright-CQ-Editor)**. 
