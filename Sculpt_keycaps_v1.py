@@ -82,6 +82,17 @@ KEY_FACE_TILT: List[List[float]] = [
 ]
 
 
+MODE = "left"
+QUALITY = "production"
+INCLUDE_FN_ROW = False
+
+
+_QUALITY_PRESETS = {
+    "draft":      {"slices": 8},
+    "production": {"slices": 30},
+}
+
+
 # Explicit per-key heights in mm. Use None to keep sweep-derived height.
 KEY_HEIGHT: List[List[Optional[float]]] = [
     [13.0, 11.0, 9.0, 9.0, 11.0, 13.0, 0.0],
@@ -2095,16 +2106,6 @@ def export_stl(wp: cq.Workplane, path: str) -> None:
     cq.exporters.export(wp, path, exportType="STL")
     print(f"Exported: {path}")
 
-
-MODE = "left"
-QUALITY = "production"
-INCLUDE_FN_ROW = False
-
-
-_QUALITY_PRESETS = {
-    "draft":      {"slices": 8},
-    "production": {"slices": 30},
-}
 
 def _is_cq_editor() -> bool:
 
