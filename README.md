@@ -22,10 +22,6 @@ Sculpt can export both STL files for printing and STEP files for further CAD edi
 - STL and STEP export
 - Works in CQ-Editor, OCP CAD Viewer, and CLI mode
 
-## How to open the files
-
-These scripts are designed to be used with **[jmwright-CQ-Editor](https://github.com/jdegenstein/jmwright-CQ-Editor)**.
-
 ## Requirements
 
 - Python 3
@@ -153,6 +149,3 @@ This project was inspired in part by [key-sweep](https://github.com/sammy-hughes
 
 See [LICENSE](./LICENSE).
 
-## Credits
-
-Ergohaven
