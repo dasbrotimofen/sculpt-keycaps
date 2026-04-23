@@ -20,6 +20,20 @@ Sculpt can export both STL files for printing and STEP files for further CAD edi
 - STL and STEP export
 - Works in CQ-Editor, OCP CAD Viewer, and CLI mode
 
+## Examples of finished keycaps
+
+Examples of finished keycaps produced with Sculpt.
+
+<p align="center">
+  <img src="images/examples-finished-keycaps-01.png" alt="Finished Sculpt keycaps installed on ergonomic keyboards" width="49%" />
+  <img src="images/examples-finished-keycaps-02.png" alt="Close-up view of finished Sculpt keycaps" width="49%" />
+</p>
+
+<p align="center">
+  <img src="images/examples-finished-keycaps-03.png" alt="Finished Sculpt keycap set with printed support structures" width="49%" />
+  <img src="images/examples-finished-keycaps-04.png" alt="Finished Sculpt keycap sets shown off the keyboard" width="49%" />
+</p>
+
 ## Requirements
 
 - [Python 3](https://www.python.org/downloads/)
