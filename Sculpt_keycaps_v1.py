@@ -82,17 +82,6 @@ KEY_FACE_TILT: List[List[float]] = [
 ]
 
 
-MODE = "left"
-QUALITY = "production"
-INCLUDE_FN_ROW = False
-
-
-_QUALITY_PRESETS = {
-    "draft":      {"slices": 8},
-    "production": {"slices": 30},
-}
-
-
 # Explicit per-key heights in mm. Use None to keep sweep-derived height.
 KEY_HEIGHT: List[List[Optional[float]]] = [
     [13.0, 11.0, 9.0, 9.0, 11.0, 13.0, 0.0],
@@ -113,6 +102,17 @@ THUMB_SWEEP = [(8, 5.0), (8, 6.0), (8, 7.0), (0, 0.0)]                     # Thu
 
 # Keycap tuning parameters.
 THUMB_FACE_TILT = [2.0, 2.0, 2.0, 0.0]                                       # Extra local thumb face tilt in degrees.
+
+
+MODE = "left"
+QUALITY = "production"
+INCLUDE_FN_ROW = False
+
+
+_QUALITY_PRESETS = {
+    "draft":      {"slices": 8},
+    "production": {"slices": 30},
+}
 
 
 def _trace(_name: str):
