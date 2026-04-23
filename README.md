@@ -1,12 +1,10 @@
 # Sculpt – Parametric Keycap Generator by Ergohaven
 
-Parametric ergonomic keycap generator for CadQuery and CQ-Editor.
-
 <img width="2146" height="945" alt="Sculpt render" src="https://github.com/user-attachments/assets/3502d56c-482f-4ded-8752-ab155e7663f7" />
 
 ## Overview
 
-Sculpt is a parametric keycap generator for ergonomic keyboards. It gives direct control over key height, sweep, pitch, yaw, local face tilt, and thumb cluster geometry, while keeping the workflow simple and editable from a single Python file.
+Sculpt is a parametric ergonomic keycap generator for CadQuery and CQ-Editor, built for multi-axis, concave keycap design on ergonomic keyboards. It gives direct control over key height, sweep, pitch, yaw, local face tilt, and thumb cluster geometry, while keeping the workflow simple and editable from a single Python file.
 
 The script generates not only the keycaps themselves, but also integrated printable support geometry designed to preserve surface quality and make the models easier to manufacture.
 
@@ -24,10 +22,10 @@ Sculpt can export both STL files for printing and STEP files for further CAD edi
 
 ## Requirements
 
-- Python 3
-- CadQuery
-- CQ-Editor or another CadQuery-compatible viewer
-- OCP modules used by CadQuery
+- [Python 3](https://www.python.org/downloads/)
+- [CadQuery](https://cadquery.readthedocs.io/en/latest/installation.html)
+- [jmwright-CQ-Editor](https://github.com/jdegenstein/jmwright-CQ-Editor/releases) or another CadQuery-compatible viewer
+- [OCP modules used by CadQuery](https://cadquery.readthedocs.io/en/latest/installation.html)
 
 ## Quick Start
 
@@ -137,7 +135,7 @@ Export formats:
 
 ## Printing Notes
 
-Sculpt includes integrated support geometry intended to make printing easier while preserving the visible surfaces of the keycaps.
+Sculpt includes integrated support geometry intended to make printing easier while preserving the visible surfaces of the keycaps. This support strategy was developed specifically for SLA printing.
 
 The generated models are designed to be placed on the print bed at a print-friendly angle. Final fit may still require small tolerance adjustments depending on your printer, material, slicer profile, and stem calibration.
 
