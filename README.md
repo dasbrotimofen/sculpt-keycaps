@@ -22,8 +22,6 @@ Sculpt can export both STL files for printing and STEP files for further CAD edi
 
 ## Examples of finished keycaps
 
-Examples of finished keycaps produced with Sculpt.
-
 <p align="center">
   <img src="images/examples-finished-keycaps-01.png" alt="Finished Sculpt keycaps installed on ergonomic keyboards" width="49%" />
   <img src="images/examples-finished-keycaps-02.png" alt="Close-up view of finished Sculpt keycaps" width="49%" />
