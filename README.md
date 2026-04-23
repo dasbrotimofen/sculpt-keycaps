@@ -3,7 +3,8 @@ Sculpt – Parametric Keycap Generator by "Ergohaven"
  
  
 
-<img width="2403" height="940" alt="image" src="https://github.com/user-attachments/assets/6df8f671-9351-453d-b1c0-c8a1a90d1dd9" />
+<img width="2146" height="945" alt="image" src="https://github.com/user-attachments/assets/3502d56c-482f-4ded-8752-ab155e7663f7" />
+
 
 
  
