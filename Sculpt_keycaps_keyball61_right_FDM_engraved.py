@@ -1,11 +1,11 @@
 # =============================================================================
-# KEYBALL61 FDM/RESIN PREVIEW + ENGRAVED LEGENDS — RIGHT HAND
+# KEYBALL61 PREVIEW + ENGRAVED LEGENDS V2 — RIGHT HAND
 #
-# Added:
-#   * larger/bold FDM legends, finer resin legends
-#   * shallow engraving to avoid through-holes
-#   * PREVIEW_MODE = "full" / "row" / "key"
-#   * row/key preview omits thumbs for much faster CQ-Editor iteration
+# Fixes:
+#   * row/full preview no longer depends on PREVIEW_COL
+#   * PREVIEW_COL is required only for PREVIEW_MODE = "key"
+#   * engraving cutter again reaches the concave/dimpled surface
+#   * cutter penetration is limited to avoid through-holes in closed letters
 # =============================================================================
 
 # =============================================================================
@@ -187,7 +187,10 @@ else:
 # "key"  = one matrix key
 PREVIEW_MODE = "row"
 PREVIEW_ROW = 2
-PREVIEW_COL = 3
+
+# Only used when PREVIEW_MODE == "key".
+# It can be None for "row" or "full".
+PREVIEW_COL = None
 _QUALITY_PRESETS = {
     "draft":      {"slices": 8},
     "production": {"slices": 30},
@@ -1690,18 +1693,23 @@ def _engrave_top_legend(
     face_tilt: float,
 ) -> cq.Solid:
     """
-    Engrave a centered legend shallowly into the actual top region.
+    Engrave a centered legend into the actual concave top surface.
 
-    [Inference] The cutter is positioned near the nominal top face and only
-    extends by TOP_LEGEND_DEPTH plus a very small overlap, instead of passing
-    through the whole dimple depth. This avoids turning closed letters such as
-    'D' into through-holes when the top shell is thin.
+    The cutter starts at the nominal top plane and reaches through the dish
+    only far enough to enter the real surface by TOP_LEGEND_DEPTH.
+    This keeps the complete glyph visible while avoiding the previous
+    excessive cutter depth that could turn closed letters into through-holes.
     """
     if not TOP_LEGENDS or not symbol:
         return body
 
     try:
-        cutter_depth = max(0.15, TOP_LEGEND_DEPTH + 0.08)
+        # Need to traverse the dish depth before reaching the center surface.
+        # Only a tiny boolean overlap is added beyond the requested engraving.
+        cutter_depth = max(
+            0.15,
+            abs(dimple_depth) + TOP_LEGEND_DEPTH + 0.05
+        )
 
         txt_wp = cq.Workplane("XY").text(
             symbol,
@@ -1721,12 +1729,11 @@ def _engrave_top_legend(
         if abs(face_tilt) > 1e-6:
             ang = (ang[0] + face_tilt, ang[1], ang[2])
 
-        # Place the cutter just above the nominal top plane and cut downward.
-        # The small positive offset ensures reliable boolean overlap.
+        # Start just above the nominal top surface.
         top_origin = (
             off[0],
             off[1],
-            off[2] + kb_h + 0.04
+            off[2] + kb_h + 0.03
         )
 
         trsf = _compose_trsf(
@@ -2154,8 +2161,11 @@ def _build_hand_solids(
         for j in range(n_rows):
             if PREVIEW_MODE == "row" and j != PREVIEW_ROW:
                 continue
-            if PREVIEW_MODE == "key" and (j != PREVIEW_ROW or i != PREVIEW_COL):
-                continue
+            if PREVIEW_MODE == "key":
+                if PREVIEW_COL is None:
+                    raise ValueError("PREVIEW_COL must be set when PREVIEW_MODE == 'key'")
+                if j != PREVIEW_ROW or i != PREVIEW_COL:
+                    continue
 
             _ang_data, height = design[i][j]
 
@@ -2347,7 +2357,12 @@ if _is_cq_editor():
     import traceback as _tb
     _preset = _QUALITY_PRESETS.get(QUALITY, _QUALITY_PRESETS["production"])
     _kc = KeycapConfig(slices=_preset["slices"])
-    print(f"[Ergohaven] MODE={MODE!r}, QUALITY={QUALITY!r} (slices={_kc.slices}), PREVIEW_MODE={PREVIEW_MODE!r}, ROW={PREVIEW_ROW}, COL={PREVIEW_COL}")
+    if PREVIEW_MODE == "key":
+        print(f"[Ergohaven] MODE={MODE!r}, QUALITY={QUALITY!r} (slices={_kc.slices}), PREVIEW_MODE='key', ROW={PREVIEW_ROW}, COL={PREVIEW_COL}")
+    elif PREVIEW_MODE == "row":
+        print(f"[Ergohaven] MODE={MODE!r}, QUALITY={QUALITY!r} (slices={_kc.slices}), PREVIEW_MODE='row', ROW={PREVIEW_ROW}")
+    else:
+        print(f"[Ergohaven] MODE={MODE!r}, QUALITY={QUALITY!r} (slices={_kc.slices}), PREVIEW_MODE='full'")
     try:
         if MODE == "single":
             _result = build_test_keycap(_kc)
