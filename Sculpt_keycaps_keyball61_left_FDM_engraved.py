@@ -1,4 +1,14 @@
 # =============================================================================
+# KEYBALL61 FDM/RESIN PREVIEW + ENGRAVED LEGENDS — LEFT HAND
+#
+# Added:
+#   * larger/bold FDM legends, finer resin legends
+#   * shallow engraving to avoid through-holes
+#   * PREVIEW_MODE = "full" / "row" / "key"
+#   * row/key preview omits thumbs for much faster CQ-Editor iteration
+# =============================================================================
+
+# =============================================================================
 # KEYBALL61 PERSONAL FDM + ENGRAVED QWERTY — LEFT HAND
 #
 # [Inference] Draft FDM workflow:
@@ -157,11 +167,27 @@ FDM_MODE = True
 FDM_LEVEL_TOP = True
 
 # Top-surface engraved legends.
-# [Inference] 0.45 mm is a sensible first FDM test depth for a 0.4 mm nozzle.
 TOP_LEGENDS = True
-TOP_LEGEND_FONT = "Arial"
-TOP_LEGEND_SIZE = 4.2
-TOP_LEGEND_DEPTH = 0.45
+
+# [Inference] First-pass legend settings:
+# FDM gets a larger/bolder/shallower engraving for a 0.4 mm nozzle.
+# Resin keeps a finer engraving.
+if FDM_MODE:
+    TOP_LEGEND_FONT = "DejaVu Sans:style=Bold"
+    TOP_LEGEND_SIZE = 5.2
+    TOP_LEGEND_DEPTH = 0.30
+else:
+    TOP_LEGEND_FONT = "Arial"
+    TOP_LEGEND_SIZE = 4.2
+    TOP_LEGEND_DEPTH = 0.40
+
+# Fast preview controls for CQ-Editor.
+# "full" = whole hand
+# "row"  = one matrix row
+# "key"  = one matrix key
+PREVIEW_MODE = "row"
+PREVIEW_ROW = 2
+PREVIEW_COL = 3
 _QUALITY_PRESETS = {
     "draft":      {"slices": 8},
     "production": {"slices": 30},
@@ -1664,18 +1690,18 @@ def _engrave_top_legend(
     face_tilt: float,
 ) -> cq.Solid:
     """
-    Engrave a centered legend into the finished key top.
+    Engrave a centered legend shallowly into the actual top region.
 
-    The cutter is created in the local nominal top-face plane, extended
-    downward far enough to pass through the concave dish, then transformed
-    with the same final top-face transform as the keycap.
+    [Inference] The cutter is positioned near the nominal top face and only
+    extends by TOP_LEGEND_DEPTH plus a very small overlap, instead of passing
+    through the whole dimple depth. This avoids turning closed letters such as
+    'D' into through-holes when the top shell is thin.
     """
     if not TOP_LEGENDS or not symbol:
         return body
 
     try:
-        # Extend through the dish plus the desired engraving depth.
-        cutter_depth = max(0.2, abs(dimple_depth) + TOP_LEGEND_DEPTH + 0.35)
+        cutter_depth = max(0.15, TOP_LEGEND_DEPTH + 0.08)
 
         txt_wp = cq.Workplane("XY").text(
             symbol,
@@ -1689,14 +1715,20 @@ def _engrave_top_legend(
         if not txt_solids:
             return body
 
-        # The final loft slice defines the nominal top-face transform.
         ai = compute_angle_index(n)
         off = adjust_offsets(n, face_offset, ai)
         ang = adjust_angles(n, face_angle, ai)
         if abs(face_tilt) > 1e-6:
             ang = (ang[0] + face_tilt, ang[1], ang[2])
 
-        top_origin = (off[0], off[1], off[2] + kb_h)
+        # Place the cutter just above the nominal top plane and cut downward.
+        # The small positive offset ensures reliable boolean overlap.
+        top_origin = (
+            off[0],
+            off[1],
+            off[2] + kb_h + 0.04
+        )
+
         trsf = _compose_trsf(
             ang[0], ang[1], ang[2],
             top_origin[0], top_origin[1], top_origin[2]
@@ -2120,6 +2152,11 @@ def _build_hand_solids(
 
     for i in range(n_cols):
         for j in range(n_rows):
+            if PREVIEW_MODE == "row" and j != PREVIEW_ROW:
+                continue
+            if PREVIEW_MODE == "key" and (j != PREVIEW_ROW or i != PREVIEW_COL):
+                continue
+
             _ang_data, height = design[i][j]
 
             _kh = _key_height[j][i] if (j < len(_key_height) and i < len(_key_height[j])) else None
@@ -2155,6 +2192,10 @@ def _build_hand_solids(
             for s in parts:
                 all_solids.append(translate_solid(s, dx, dy, 0))
 
+
+    # Thumbs are omitted in row/key preview modes for speed.
+    if PREVIEW_MODE != "full":
+        return all_solids
 
     thumb_y = -lc.unit * n_rows
     if is_right:
@@ -2306,7 +2347,7 @@ if _is_cq_editor():
     import traceback as _tb
     _preset = _QUALITY_PRESETS.get(QUALITY, _QUALITY_PRESETS["production"])
     _kc = KeycapConfig(slices=_preset["slices"])
-    print(f"[Ergohaven] MODE={MODE!r}, QUALITY={QUALITY!r} (slices={_kc.slices}), INCLUDE_FN_ROW={INCLUDE_FN_ROW}")
+    print(f"[Ergohaven] MODE={MODE!r}, QUALITY={QUALITY!r} (slices={_kc.slices}), PREVIEW_MODE={PREVIEW_MODE!r}, ROW={PREVIEW_ROW}, COL={PREVIEW_COL}")
     try:
         if MODE == "single":
             _result = build_test_keycap(_kc)
