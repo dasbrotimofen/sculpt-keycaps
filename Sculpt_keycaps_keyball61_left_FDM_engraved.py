@@ -187,6 +187,7 @@ else:
 # "key"  = one matrix key
 PREVIEW_MODE = "row"
 PREVIEW_ROW = 2
+# PREVIEW_COL = 3 only when key preview is desired. Otherwise, it can be None.
 
 # Only used when PREVIEW_MODE == "key".
 # It can be None for "row" or "full".
