@@ -2138,17 +2138,17 @@ def _build_hand_solids(
     # [Inference] QWERTY alpha placement; non-letter keys are intentionally blank.
     # Edit these arrays if your VIA/Remap layout differs.
     _TOP_LEGENDS_LEFT = [
-        ["",  "",  "",  "",  "",  "",  ""],
-        ["",  "Q", "W", "E", "R", "T", ""],
-        ["",  "A", "S", "D", "F", "G", ""],
-        ["",  "Z", "X", "C", "V", "B", ""],
-        ["",  "",  "",  "",  "",  "",  ""],
+        ["ESC",  "1", "2", "3", "4", "5", "6"],
+        ["T",  "Q", "W", "E", "R", "T", ""],
+        ["CL",  "A", "S", "D", "F", "G", ""],
+        ["S",  "Z", "X", "C", "V", "B", "MO"],
+        ["C",  "",  "",  "",  "",  "",  "AltGr"],
     ]
     _TOP_LEGENDS_RIGHT = [
-        ["",  "",  "",  "",  "",  "",  ""],
-        ["",  "Y", "U", "I", "O", "P", ""],
-        ["",  "H", "J", "K", "L", "",  ""],
-        ["",  "N", "M", "",  "",  "",  ""],
+        ["",  "7", "8", "9", "0", "",  "BS"],
+        ["",  "Y", "U", "I", "O", "P", "Ü"],
+        ["",  "H", "J", "K", "L", "Ö",  "Ä"],
+        ["MO","N", "M", ",", ".", "-", "$"],
         ["",  "",  "",  "",  "",  "",  ""],
     ]
     _TOP_LEGENDS_MATRIX = _TOP_LEGENDS_RIGHT if is_right else _TOP_LEGENDS_LEFT
