@@ -148,11 +148,11 @@ THUMB_HEIGHTS: Tuple[float, float, float, float] = (9.0, 10.5, 12.0, 0.0)  # Thu
 
 
 # Keycap tuning parameters.
-THUMB_SWEEP = [(8, 5.0), (8, 6.0), (8, 7.0), (0, 0.0)]                     # Thumb sweep angles as (pitch, yaw).
+THUMB_SWEEP = [(12, 10.0), (14, 7.0), (16, 4.0), (0, 0.0)]                     # Thumb sweep angles as (pitch, yaw).
 
 
 # Keycap tuning parameters.
-THUMB_FACE_TILT = [2.0, 2.0, 2.0, 0.0]                                       # Extra local thumb face tilt in degrees.
+THUMB_FACE_TILT = [8.0, 10.0, 12.0, 0.0]                                       # Extra local thumb face tilt in degrees.
 
 
 MODE = "left"
@@ -166,6 +166,9 @@ INCLUDE_FN_ROW = False
 FDM_MODE = True
 FDM_LEVEL_TOP = True
 
+# Top surface are flat, more FDM friendly
+TOP_SURFACE_MODE = "flat"
+# TOP_SURFACE_MODE = "concave"
 # Top-surface engraved legends.
 TOP_LEGENDS = True
 
@@ -2140,14 +2143,14 @@ def _build_hand_solids(
     _TOP_LEGENDS_LEFT = [
         ["ESC",  "1", "2", "3", "4", "5", "6"],
         ["T",  "Q", "W", "E", "R", "T", ""],
-        ["CL",  "A", "S", "D", "F", "G", ""],
-        ["S",  "Z", "X", "C", "V", "B", "MO"],
+        ["MO",  "A", "S", "D", "F", "G", ""],
+        ["S",  "Y", "X", "C", "V", "B", "MO"],
         ["C",  "",  "",  "",  "",  "",  "AltGr"],
     ]
     _TOP_LEGENDS_RIGHT = [
         ["",  "7", "8", "9", "0", "",  "BS"],
-        ["",  "Y", "U", "I", "O", "P", "Ü"],
-        ["",  "H", "J", "K", "L", "Ö",  "Ä"],
+        ["",  "Z", "U", "I", "O", "P", "�"],
+        ["",  "H", "J", "K", "L", "�",  "�"],
         ["MO","N", "M", ",", ".", "-", "$"],
         ["",  "",  "",  "",  "",  "",  ""],
     ]
@@ -2190,10 +2193,14 @@ def _build_hand_solids(
                            if j < len(_TOP_LEGENDS_MATRIX) and i < len(_TOP_LEGENDS_MATRIX[j])
                            else "")
 
+            if TOP_SURFACE_MODE == "flat":
+                _dimple_depth = 0.0
+            else:
+                _dimple_depth = lc.dimple_depth
 
             _is_homing = ((not is_right and j == 2 and i == 4)
                           or (is_right and j == 2 and i == 2))
-            parts = build_keycap(kc, sc, fo, fa, lc.dimple_depth, kc.slices, 1.0, boot,
+            parts = build_keycap(kc, sc, fo, fa, _dimple_depth, kc.slices, 1.0, boot,
                                  face_tilt=_face_tilt,
                                  inner_label="", top_legend=_top_legend,
                                  homing_bump=_is_homing)
