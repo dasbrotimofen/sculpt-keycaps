@@ -155,7 +155,7 @@ THUMB_SWEEP = [(12, 10.0), (14, 7.0), (16, 4.0), (0, 0.0)]                     #
 THUMB_FACE_TILT = [8.0, 10.0, 12.0, 0.0]                                       # Extra local thumb face tilt in degrees.
 
 
-MODE = "left"
+MODE = "right"
 QUALITY = "draft"
 INCLUDE_FN_ROW = False
 
@@ -164,6 +164,8 @@ INCLUDE_FN_ROW = False
 # - approximately levels the nominal top-face plane to the build plate
 # - creates NO CAD support structures; let the slicer generate supports
 FDM_MODE = True
+FDM_FLIP_TOP_DOWN = True
+#FDM_FLIP_TOP_DOWN = False
 FDM_LEVEL_TOP = True
 
 # Top surface are flat, more FDM friendly
@@ -188,7 +190,7 @@ else:
 # "full" = whole hand
 # "row"  = one matrix row
 # "key"  = one matrix key
-PREVIEW_MODE = "row"
+PREVIEW_MODE = "full"
 PREVIEW_ROW = 2
 # PREVIEW_COL = 3 only when key preview is desired. Otherwise, it can be None.
 
@@ -1740,7 +1742,7 @@ def _engrave_top_legend(
             off[2] + kb_h + 0.03
         )
 
-        trsf = _compose_trsf(
+        trsf = _compose_trsf(S
             ang[0], ang[1], ang[2],
             top_origin[0], top_origin[1], top_origin[2]
         )
@@ -2054,21 +2056,24 @@ def build_keycap(
 
 
 
-def _fdm_level_top(solids, face_angle: Tuple[float, float, float], face_tilt: float):
-    """
-    [Inference] Approximate leveling of the nominal top-face plane.
-    Undo final X/Y face tilt while preserving Z/yaw.
-    """
+def _fdm_level_top(solids, face_angle, face_tilt):
     rx = face_angle[0] + face_tilt
     ry = face_angle[1]
 
+    # Level the top surface
     out = [rotate_solid(s, -rx, -ry, 0.0) for s in solids]
+
+    # Optional: flip cap so the flat top face lies on the print bed
+    if FDM_FLIP_TOP_DOWN:
+        out = [rotate_solid(s, 180.0, 0.0, 0.0) for s in out]
+
     if not out:
         return out
 
+    # Always place lowest geometry on Z=0
     min_z = min(s.BoundingBox().zmin for s in out)
-    if min_z < 0.0:
-        out = [translate_solid(s, 0.0, 0.0, -min_z) for s in out]
+    out = [translate_solid(s, 0.0, 0.0, -min_z) for s in out]
+
     return out
 
 
