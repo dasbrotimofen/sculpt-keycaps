@@ -96,6 +96,7 @@ STEM_KEY_WIDTH = 18.0                    # Reference key width for stem placemen
 STEM_BASE_LIFT = 0.0                     # Stem lift above the local base in mm.
 STEM_WING_BREADTH = 4.1                  # Cross wing breadth in mm.
 STEM_WING_THICKNESS = 1.17               # Cross wing thickness in mm.
+STEM_ENTRY_FILLET_RADIUS = 0.0           # Switch-entry rim radius; unrelated to cap root. Keep 0 unless wanted.
 
 
 # Keycap tuning parameters.
@@ -202,6 +203,13 @@ PREVIEW_ROW = 2
 # Only used when PREVIEW_MODE == "key".
 # It can be None for "row" or "full".
 PREVIEW_COL = None
+
+# -----------------------------------------------------------------------------
+# Stem-root fillet options
+# -----------------------------------------------------------------------------
+STEM_CAP_ROOT_RADIUS = 0.0              # Experimental stem-root fillet disabled.
+STEM_CAP_ROOT_RADIUS_MIN = 0.20         # Smallest allowed fallback radius in mm.
+STEM_CAP_ROOT_RADIUS_STEP = 0.10        # Radius decrement per retry in mm.
 _QUALITY_PRESETS = {
     "draft":      {"slices": 8},
     "production": {"slices": 30},
@@ -1164,6 +1172,77 @@ def make_root_geometry_solid(sc: StemConfig, height: float,
         return result
 
 
+
+def _fillet_stem_entry_rim(wp: cq.Workplane,
+                              sc: StemConfig,
+                              lift: float = 0.0,
+                              radius: float = STEM_ENTRY_FILLET_RADIUS) -> cq.Workplane:
+    """
+    Round ONLY the OUTER circular rim at the free/open end of the MX stem socket.
+
+    This is the rim visible around the cross-shaped opening and the end pushed
+    onto the switch stem.  The internal cross geometry is not selected.
+
+    Geometry limit:
+      outer radius = (4.1 + 1.17) / 2 = 2.635 mm
+      cross half-width = 4.1 / 2 = 2.050 mm
+      minimum radial wall = 0.585 mm
+
+    Therefore a true 1.0 mm edge fillet cannot fit without intersecting the
+    internal cross cavity.  0.50 mm is used as the practical maximum here.
+    """
+    if radius <= 0.0:
+        return wp
+
+    stem_outer_d = sc.wing_breadth + sc.wing_thickness
+    tol_z = 0.08
+    tol_d = 0.20
+    result_solids = []
+
+    for solid in wp.solids().vals():
+        target_edges = []
+
+        for edge in solid.Edges():
+            bb = edge.BoundingBox()
+
+            # The desired outer rim lies in the entry plane z = lift.
+            if abs(bb.zmin - lift) > tol_z or abs(bb.zmax - lift) > tol_z:
+                continue
+
+            sx = bb.xmax - bb.xmin
+            sy = bb.ymax - bb.ymin
+
+            # Only the full circular outside edge spans the complete diameter
+            # in both X and Y. The cross-opening edges are much smaller.
+            if abs(sx - stem_outer_d) <= tol_d and abs(sy - stem_outer_d) <= tol_d:
+                target_edges.append(edge)
+
+        if not target_edges:
+            print("[stem entry fillet] WARNING: outer entry rim was not found; stem left unchanged")
+            result_solids.append(solid)
+            continue
+
+        mk = BRepFilletAPI_MakeFillet(solid.wrapped)
+        for edge in target_edges:
+            mk.Add(radius, edge.wrapped)
+
+        mk.Build()
+        if not mk.IsDone():
+            print(
+                f"[stem entry fillet] WARNING: {radius:.3f} mm fillet failed; "
+                "stem left unchanged. Reduce STEM_ENTRY_FILLET_RADIUS."
+            )
+            result_solids.append(solid)
+            continue
+
+        result_solids.append(cq.Solid(mk.Shape()))
+
+    out = cq.Workplane("XY")
+    for s in result_solids:
+        out = out.add(s)
+    return out
+
+
 @_trace("make_stem")
 def make_stem(sc: StemConfig, height: float,
               spacing: float = 0.0, lift: float = 0.0) -> cq.Workplane:
@@ -1194,6 +1273,16 @@ def make_stem(sc: StemConfig, height: float,
             result = result.union(ext)
         except Exception:
             pass
+
+
+    if STEM_ENTRY_FILLET_RADIUS > 0.0:
+        result = _fillet_stem_entry_rim(
+            result,
+            sc,
+            lift=lift,
+            radius=STEM_ENTRY_FILLET_RADIUS,
+        )
+
     return result
 
 
@@ -1770,6 +1859,114 @@ def _engrave_top_legend(
         return body
 
 
+
+def _fuse_and_fillet_stem_cap_root(body: cq.Solid,
+                                    stem_solid: cq.Solid,
+                                    sc: StemConfig,
+                                    radius: float = STEM_CAP_ROOT_RADIUS) -> cq.Solid:
+    """
+    Fuse stem + keycap body and fillet the REAL circular/oval intersection edge
+    where the outside of the stem meets the inner keycap surface.
+
+    Adaptive behavior:
+      - first tries STEM_CAP_ROOT_RADIUS
+      - if that fails, reduces by STEM_CAP_ROOT_RADIUS_STEP
+      - stops at STEM_CAP_ROOT_RADIUS_MIN
+      - if nothing succeeds, leaves the stem sharp
+
+    No artificial collar is created. The fillet follows the actual junction
+    between the stem OD and the sloped/curved inner cap surface.
+    """
+    fused_parts = (
+        cq.Workplane("XY")
+        .add(body)
+        .union(cq.Workplane("XY").add(stem_solid))
+        .solids()
+        .vals()
+    )
+    if not fused_parts:
+        print("[stem cap root fillet] WARNING: body/stem fuse failed")
+        return body
+
+    fused = fused_parts[0]
+
+    if radius <= 0.0:
+        return fused
+
+    stem_d = sc.wing_breadth + sc.wing_thickness
+    candidates = []
+
+    # Find the actual cap-side stem/root junction edge.
+    # It is centered on the stem axis, spans about the stem OD in X/Y,
+    # and is non-planar in Z when the inner cap surface is tilted.
+    for edge in fused.Edges():
+        bb = edge.BoundingBox()
+        sx = bb.xmax - bb.xmin
+        sy = bb.ymax - bb.ymin
+        sz = bb.zmax - bb.zmin
+        cx = (bb.xmax + bb.xmin) * 0.5
+        cy = (bb.ymax + bb.ymin) * 0.5
+
+        if abs(cx) > 0.5 or abs(cy) > 0.5:
+            continue
+        if abs(sx - stem_d) > 0.35 or abs(sy - stem_d) > 0.35:
+            continue
+        if sz < 0.05:
+            continue
+
+        candidates.append(edge)
+
+    if not candidates:
+        print("[stem cap root fillet] WARNING: actual stem/cap root edge not found")
+        return fused
+
+    # Prefer the longest candidate: normally this is the full perimeter root edge.
+    root_edge = max(candidates, key=lambda e: e.Length())
+
+    preferred = max(float(radius), 0.0)
+    minimum = max(float(STEM_CAP_ROOT_RADIUS_MIN), 0.0)
+    step = max(float(STEM_CAP_ROOT_RADIUS_STEP), 0.01)
+
+    # Clamp minimum so the loop always terminates sensibly.
+    if minimum > preferred:
+        minimum = preferred
+
+    # Integer step count avoids cumulative floating-point drift.
+    tries = int(math.floor((preferred - minimum) / step + 1e-9)) + 1
+    radii = [preferred - i * step for i in range(tries)]
+
+    # Ensure the exact minimum is tried if the step does not land on it.
+    if not radii or radii[-1] > minimum + 1e-9:
+        radii.append(minimum)
+
+    for r_try in radii:
+        r_try = max(r_try, minimum)
+
+        try:
+            mk = BRepFilletAPI_MakeFillet(fused.wrapped)
+            mk.Add(r_try, root_edge.wrapped)
+            mk.Build()
+
+            if mk.IsDone():
+                if r_try < preferred - 1e-6:
+                    print(
+                        f"[stem cap root fillet] reduced R{preferred:.2f} "
+                        f"-> R{r_try:.2f}"
+                    )
+                return cq.Solid(mk.Shape())
+
+        except Exception:
+            pass
+
+    print(
+        f"[stem cap root fillet] WARNING: no radius from "
+        f"R{preferred:.2f} down to R{minimum:.2f} succeeded; stem left sharp"
+    )
+    return fused
+
+
+
+
 @_trace("build_keycap")
 def build_keycap(
     kc: KeycapConfig = KC,
@@ -1853,9 +2050,6 @@ def build_keycap(
 
                 parts.append(hb)
 
-    parts.append(body)
-
-
     spacing = sc.base_spacing if unit >= 2.0 else 0.0
     stem_extra_h = face_offset[2] + kc.base_width
     with _trace_block("build_keycap.stem_build"):
@@ -1866,13 +2060,23 @@ def build_keycap(
                 stem_clipped = (cq.Workplane("XY").add(stem_wp)
                                 .intersect(cq.Workplane("XY").add(cav_sol)))
                 for s in stem_clipped.solids().vals():
-                    parts.append(s)
+                    if STEM_CAP_ROOT_RADIUS > 0.0:
+                        body = _fuse_and_fillet_stem_cap_root(
+                            body,
+                            s,
+                            sc,
+                            radius=STEM_CAP_ROOT_RADIUS,
+                        )
+                    else:
+                        parts.append(s)
         except Exception:
             for s in stem_wp.solids().vals():
                 parts.append(s)
     else:
         for s in stem_wp.solids().vals():
             parts.append(s)
+
+    parts.append(body)
 
 
     # Lower wedge/tine/foot geometry is part of the upstream
@@ -2147,23 +2351,33 @@ def _build_hand_solids(
         _thumb_sweep = [(pitch, -yaw) for pitch, yaw in _thumb_sweep]
 
 
-    # Top legends for the physical Sculpt matrix.
-    # [Inference] QWERTY alpha placement; non-letter keys are intentionally blank.
-    # Edit these arrays if your VIA/Remap layout differs.
+    # Top legends matching the user's CURRENT Keyball61 QMK keymap.
+    #
+    # Physical QMK rows:
+    #   ESC  1 2 3 4 5        | 6 7 8 9 0 -
+    #   `    Q W E R T        | Y U I O P =
+    #   Ctrl A S D F G        | H J K L ; '
+    #   Shift Z X C V B [     | ] N M , . / Shift
+    #   GUI App Home End Alt Space Tab | Bspc Enter AltGr PgUp PgDn \ GUI
+    #
+    # Blank entries are matrix positions not generated by the current
+    # personalized KEY_HEIGHT geometry.
     _TOP_LEGENDS_LEFT = [
-        ["ESC",  "1", "2", "3", "4", "5", "6"],
-        ["T",  "Q", "W", "E", "R", "T", ""],
-        ["MO",  "A", "S", "D", "F", "G", ""],
-        ["S",  "Y", "X", "C", "V", "B", "MO"],
-        ["C",  "",  "",  "",  "",  "",  "AltGr"],
+        ["ESC",   "1",    "2",    "3",    "4",    "5",     ""],
+        ["`",     "Q",    "W",    "E",    "R",    "T",     ""],
+        ["Ctrl",  "A",    "S",    "D",    "F",    "G",     ""],
+        ["Shift", "Z",    "X",    "C",    "V",    "B",     "["],
+        ["GUI",   "App",  "Home", "End",  "Alt",  "Space", "Tab"],
     ]
+
     _TOP_LEGENDS_RIGHT = [
-        ["",  "7", "8", "9", "0", "",  "BS"],
-        ["",  "Z", "U", "I", "O", "P", "�"],
-        ["",  "H", "J", "K", "L", "�",  "�"],
-        ["MO","N", "M", ",", ".", "-", "$"],
-        ["",  "",  "",  "",  "",  "",  ""],
+        ["",      "6",     "7",     "8",    "9",    "0",    "-"],
+        ["",      "Y",     "U",     "I",    "O",    "P",    "="],
+        ["",      "H",     "J",     "K",    "L",    ";",    "'"],
+        ["]",     "N",     "M",     ",",    ".",    "/",    "Shift"],
+        ["Bspc",  "Enter", "",      "",     "",     "\\",   "GUI"],
     ]
+
     _TOP_LEGENDS_MATRIX = _TOP_LEGENDS_RIGHT if is_right else _TOP_LEGENDS_LEFT
 
 
