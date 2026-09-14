@@ -140,7 +140,7 @@ KEY_HEIGHT: List[List[Optional[float]]] = [
     [15.40, 12.90, 7.90, 5.70, 11.90, 15.40, 0.00],  # row 1
     [14.80, 12.30, 7.00, 5.00, 11.30, 14.80, 0.00],  # row 2 / home-ish
     [17.00, 15.00, 10.00, 8.00, 14.00, 17.00, 20.00],  # row 3
-    [20.00, 18.00, 13.00, 0.00, 11.50, 0.00,],  # row 4 left: blank, [, ], blank, Alt
+    [20.00, 18.00, 13.00, 11.50, 0.00, 0.00, 0.00],  # row 4 left: blank, [, ], blank, Alt
 ]
 
 
@@ -158,7 +158,7 @@ THUMB_SWEEP = [(12, 10), (14, 7.0), (16, 4.0), (0, 0.0)]                       #
 THUMB_FACE_TILT = [2.0, 4.0, 5.0, 0.0]                                       # Extra local thumb face tilt in degrees.
 
 
-MODE = "right.kk"
+MODE = "right"
 QUALITY = "final"
 INCLUDE_FN_ROW = False
 
@@ -2374,13 +2374,13 @@ def _build_hand_solids(
         ["T", "Q",     "W",     "E",     "R",    "T",     ""],
         ["MM",   "A",     "S",     "D",     "F",    "G",     ""],
         ["S",    "Y",     "X",     "C",     "V",    "B",     ""],
-        ["C",        "[",     "]",     "",      "A",  "",      ""],
+        ["C",        "[",     "]",     "A",      "",  "",      ""],
     ]
 
     _TOP_LEGENDS_RIGHT = [
         ["",        "6",     "7",     "8",     "9",    "0",     "BS"],
-        ["",        "Z",     "U",     "I",     "O",    "P",     "Ü"],
-        ["",        "H",     "J",     "K",     "L",    "Ö",     "Ä"],
+        ["",        "Z",     "U",     "I",     "O",    "P",     "ï¿½"],
+        ["",        "H",     "J",     "K",     "L",    "ï¿½",     "ï¿½"],
         ["",        "N",     "M",     "",     ".",    "-",     "$"],
         ["",        "",      "",      "",      "",     "?",      "AG"],
     ]
@@ -2438,7 +2438,7 @@ def _build_hand_solids(
             # Special case requested for the physical left Alt key:
             # keep its matrix position, but give ONLY this key a thumb-like face angle.
             # Every other fifth-row key keeps the normal matrix angle.
-            if (not is_right) and j == 4 and i == 4:
+            if (not is_right) and j == 4 and i == 3:
                 _alt_tp, _alt_ty = _thumb_sweep[1]
                 fa = (_alt_tp, _alt_ty, 0.0)
                 _face_tilt = _thumb_face_tilt[1]
