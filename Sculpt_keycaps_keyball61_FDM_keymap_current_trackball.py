@@ -136,10 +136,10 @@ KEY_FACE_TILT: List[List[float]] = [
 # [Inference] Trial geometry based on measured finger lengths.
 # Verify column mapping in CQ-Editor before printing the whole set.
 KEY_HEIGHT: List[List[Optional[float]]] = [
-    [18.00, 16.00, 11.00, 9.00, 11.00, 13.00, 0.00],  # row 0
-    [15.40, 12.90, 7.90, 5.70, 7.90, 11.40, 0.00],  # row 1
-    [14.80, 12.30, 7.00, 5.00, 6.80, 10.30, 0.00],  # row 2 / home-ish
-    [17.00, 15.00, 10.00, 8.00, 9.50, 12.80, 13.80],  # row 3
+    [18.00, 16.00, 11.00, 9.00, 15.00, 18.00, 0.00],  # row 0
+    [15.40, 12.90, 7.90, 5.70, 11.90, 15.40, 0.00],  # row 1
+    [14.80, 12.30, 7.00, 5.00, 11.30, 14.80, 0.00],  # row 2 / home-ish
+    [17.00, 15.00, 10.00, 8.00, 14.00, 17.00, 20.00],  # row 3
     [20.00, 18.00, 13.00, 0.00, 11.50, 0.00,],  # row 4 left: blank, [, ], blank, Alt
 ]
 
@@ -158,8 +158,8 @@ THUMB_SWEEP = [(12, 10), (14, 7.0), (16, 4.0), (0, 0.0)]                       #
 THUMB_FACE_TILT = [2.0, 4.0, 5.0, 0.0]                                       # Extra local thumb face tilt in degrees.
 
 
-MODE = "right"
-QUALITY = "draft"
+MODE = "right.kk"
+QUALITY = "final"
 INCLUDE_FN_ROW = False
 
 # FDM printing mode:
@@ -172,14 +172,14 @@ FDM_FLIP_TOP_DOWN = True
 FDM_LEVEL_TOP = True
 
 # Top surface are flat, more FDM friendly
-TOP_SURFACE_MODE = "flat"
+TOP_SURFACE_MODE = "concave"
 # TOP_SURFACE_MODE = "concave"
 # Top-surface engraved legends.
 TOP_LEGENDS = True
 
 # Optional tactile homing bump on the F/J-position keycaps.
 # Disable for face-down FDM printing so the flat top lies fully on the bed.
-HOMING_BUMP_ENABLED = False
+HOMING_BUMP_ENABLED = True
 
 # [Inference] First-pass legend settings:
 # FDM gets a larger/bolder/shallower engraving for a 0.4 mm nozzle.
@@ -191,7 +191,7 @@ if FDM_MODE:
 else:
     TOP_LEGEND_FONT = "Arial"
     TOP_LEGEND_SIZE = 4.2
-    TOP_LEGEND_DEPTH = 0.40
+    TOP_LEGEND_DEPTH = 0.12
 
 # Fast preview controls for CQ-Editor.
 # "full" = whole hand
@@ -199,7 +199,7 @@ else:
 # "key"  = one matrix key
 # "thumbs" = thumb cluster only
 PREVIEW_MODE = "full"
-PREVIEW_ROW = 4
+PREVIEW_ROW = 1
 # PREVIEW_COL = 3 only when key preview is desired. Otherwise, it can be None.
 
 # Only used when PREVIEW_MODE == "key".
@@ -2371,25 +2371,25 @@ def _build_hand_solids(
     # personalized KEY_HEIGHT geometry.
     _TOP_LEGENDS_LEFT = [
         ["E",     "1",     "2",     "3",     "4",    "5",     ""],
-        ["MM", "Q",     "W",     "E",     "R",    "T",     ""],
-        ["S",   "A",     "S",     "D",     "F",    "G",     ""],
-        ["C",    "Y",     "X",     "C",     "V",    "B",     ""],
-        ["",        "[",     "]",     "",      "A",  "",      ""],
+        ["T", "Q",     "W",     "E",     "R",    "T",     ""],
+        ["MM",   "A",     "S",     "D",     "F",    "G",     ""],
+        ["S",    "Y",     "X",     "C",     "V",    "B",     ""],
+        ["C",        "[",     "]",     "",      "A",  "",      ""],
     ]
 
     _TOP_LEGENDS_RIGHT = [
         ["",        "6",     "7",     "8",     "9",    "0",     "BS"],
-        ["",        "Z",     "U",     "I",     "O",    "P",     "Ã„"],
-        ["",        "H",     "J",     "K",     "L",    "Ã–",     "Ãœ"],
-        ["",        "N",     "M",     ",",     ".",    "-",     "$"],
-        ["",        "",      "",      "",      "",     "AG",      ""],
+        ["",        "Z",     "U",     "I",     "O",    "P",     "Ü"],
+        ["",        "H",     "J",     "K",     "L",    "Ö",     "Ä"],
+        ["",        "N",     "M",     "",     ".",    "-",     "$"],
+        ["",        "",      "",      "",      "",     "?",      "AG"],
     ]
 
     _TOP_LEGENDS_MATRIX = _TOP_LEGENDS_RIGHT if is_right else _TOP_LEGENDS_LEFT
 
     # Dedicated physical thumb clusters.
     # ONLY these caps use the thumb angles, except the left-row Alt override below.
-    _THUMB_LEGENDS_LEFT = ["BS", "SP", "MU", ""]
+    _THUMB_LEGENDS_LEFT = ["SP", "MU", "BS", ""]
     _THUMB_LEGENDS_RIGHT = ["ET", "MD", "", ""]
     _THUMB_LEGENDS = _THUMB_LEGENDS_RIGHT if is_right else _THUMB_LEGENDS_LEFT
 
