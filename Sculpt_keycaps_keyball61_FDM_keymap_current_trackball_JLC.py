@@ -199,7 +199,7 @@ else:
 # "key"  = one matrix key
 # "thumbs" = thumb cluster only
 PREVIEW_MODE = "thumbs"
-PREVIEW_ROW = 3
+PREVIEW_ROW = 4
 # PREVIEW_COL = 3 only when key preview is desired. Otherwise, it can be None.
 
 # Only used when PREVIEW_MODE == "key".
@@ -211,7 +211,7 @@ PREVIEW_COL = None
 # -----------------------------------------------------------------------------
 # Connect only the sacrificial resin support structures within each physical row.
 # Different rows remain separate shells. The thumb cluster is its own group.
-JLC_CONNECT_SUPPORTS = False
+JLC_CONNECT_SUPPORTS = True
 JLC_CONNECTOR_WIDTH = 2.0             # mm; >1.5 mm per JLC connected-part rule.
 JLC_CONNECTOR_HEIGHT = 2.0            # mm; connector thickness in Z.
 JLC_CONNECTOR_OVERLAP = 2.0           # mm overlap into each support structure.
@@ -2391,8 +2391,8 @@ def _build_hand_solids(
 
     _TOP_LEGENDS_RIGHT = [
         ["",        "6",     "7",     "8",     "9",    "0",     "BS"],
-        ["",        "Z",     "U",     "I",     "O",    "P",     "Ãœ"],
-        ["",        "H",     "J",     "K",     "L",    "Ã–",     "Ã„"],
+        ["",        "Z",     "U",     "I",     "O",    "P",     "Ü"],
+        ["",        "H",     "J",     "K",     "L",    "Ö",     "Ä"],
         ["",        "N",     "M",     "",     ".",    "-",     "$"],
         ["",        "",      "",      "",      "",     "?",      "AG"],
     ]
