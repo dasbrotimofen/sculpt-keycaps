@@ -187,11 +187,11 @@ HOMING_BUMP_ENABLED = True
 if FDM_MODE:
     TOP_LEGEND_FONT = "DejaVu Sans:style=Bold"
     TOP_LEGEND_SIZE = 5.2
-    TOP_LEGEND_DEPTH = 0.05
+    TOP_LEGEND_DEPTH = 0.20
 else:
     TOP_LEGEND_FONT = "Arial"
     TOP_LEGEND_SIZE = 4.2
-    TOP_LEGEND_DEPTH = 0.05
+    TOP_LEGEND_DEPTH = 0.20
 
 # Fast preview controls for CQ-Editor.
 # "full" = whole hand
@@ -1809,71 +1809,111 @@ def _engrave_top_legend(
     face_tilt: float,
 ) -> cq.Solid:
     """
-    Engrave a centered legend into the actual concave top surface.
+    Engrave the legend to approximately TOP_LEGEND_DEPTH measured along the
+    local top-face Z direction, including on a concave/dimpled top.
 
-    The cutter starts at the nominal top plane and reaches through the dish
-    only far enough to enter the real surface by TOP_LEGEND_DEPTH.
-    This keeps the complete glyph visible while avoiding the previous
-    excessive cutter depth that could turn closed letters into through-holes.
+    Instead of making a very deep text cutter that merely reaches through the
+    dish, create a thin surface band from the actual finished keycap body:
+
+        surface band = body - body shifted inward by TOP_LEGEND_DEPTH
+
+    The text is then intersected with that band before cutting.  Therefore the
+    text can only remove the requested outer layer of the finished top surface.
     """
-    if not TOP_LEGENDS or not symbol:
+    if not TOP_LEGENDS or not symbol or TOP_LEGEND_DEPTH <= 0.0:
         return body
 
     try:
-        # Need to traverse the dish depth before reaching the center surface.
-        # Only a tiny boolean overlap is added beyond the requested engraving.
-        cutter_depth = max(
-            0.15,
-            abs(dimple_depth) + TOP_LEGEND_DEPTH + 0.05
-        )
-
-        txt_wp = cq.Workplane("XY").text(
-            symbol,
-            TOP_LEGEND_SIZE,
-            -cutter_depth,
-            halign="center",
-            valign="center",
-            font=TOP_LEGEND_FONT,
-        )
-        txt_solids = txt_wp.solids().vals()
-        if not txt_solids:
-            return body
-
         ai = compute_angle_index(n)
         off = adjust_offsets(n, face_offset, ai)
         ang = adjust_angles(n, face_angle, ai)
         if abs(face_tilt) > 1e-6:
             ang = (ang[0] + face_tilt, ang[1], ang[2])
 
-        # Start just above the nominal top surface.
+        # Transform the finished keycap into the local top-face frame.  In this
+        # frame +Z points outward from the nominal key face and -Z points into
+        # the keycap.
         top_origin = (
             off[0],
             off[1],
-            off[2] + kb_h + 0.03
+            off[2] + kb_h,
         )
-
-        trsf = _compose_trsf(
+        face_trsf = _compose_trsf(
             ang[0], ang[1], ang[2],
             top_origin[0], top_origin[1], top_origin[2]
         )
+        local_body = _transform_solid_with_trsf(body, face_trsf.Inverted())
 
-        cutters = [
-            cq.Solid(BRepBuilderAPI_Transform(s.wrapped, trsf, True).Shape())
-            for s in txt_solids
-        ]
-        tool = cutters[0] if len(cutters) == 1 else cq.Compound.makeCompound(cutters)
+        # Make a TOP_LEGEND_DEPTH-thick skin of the ACTUAL finished body.
+        # The tiny epsilon only helps the boolean and is not added to the
+        # requested engraving depth.
+        depth = float(TOP_LEGEND_DEPTH)
+        shifted_body = translate_solid(local_body, 0.0, 0.0, -depth)
+        band_wp = (
+            cq.Workplane("XY")
+            .add(local_body)
+            .cut(cq.Workplane("XY").add(shifted_body))
+        )
+        band_solids = band_wp.solids().vals()
+        if not band_solids:
+            return body
+        band = band_solids[0] if len(band_solids) == 1 else cq.Compound.makeCompound(band_solids)
+
+        # Tall text prism: its total height is deliberately unrelated to the
+        # engraving depth.  The surface-band intersection below limits the cut
+        # to TOP_LEGEND_DEPTH.
+        span = max(4.0, abs(dimple_depth) + depth + 2.0)
+        txt_wp = (
+            cq.Workplane("XY")
+            .workplane(offset=1.0)
+            .text(
+                symbol,
+                TOP_LEGEND_SIZE,
+                -span,
+                halign="center",
+                valign="center",
+                font=TOP_LEGEND_FONT,
+            )
+        )
+        txt_solids = txt_wp.solids().vals()
+        if not txt_solids:
+            return body
+        txt_tool = txt_solids[0] if len(txt_solids) == 1 else cq.Compound.makeCompound(txt_solids)
+
+        # Restrict the text cutter to the thin outer surface band only.
+        engrave_wp = (
+            cq.Workplane("XY")
+            .add(txt_tool)
+            .intersect(cq.Workplane("XY").add(band))
+        )
+        engrave_solids = engrave_wp.solids().vals()
+        if not engrave_solids:
+            return body
+        engrave_local = engrave_solids[0] if len(engrave_solids) == 1 else cq.Compound.makeCompound(engrave_solids)
+
+        # Transform the limited cutter back to world coordinates and subtract.
+        if isinstance(engrave_local, cq.Compound):
+            world_cutters = [
+                _transform_solid_with_trsf(s, face_trsf)
+                for s in engrave_local.Solids()
+            ]
+            engrave_world = (
+                world_cutters[0] if len(world_cutters) == 1
+                else cq.Compound.makeCompound(world_cutters)
+            )
+        else:
+            engrave_world = _transform_solid_with_trsf(engrave_local, face_trsf)
 
         cut_wp = (
             cq.Workplane("XY")
             .add(body)
-            .cut(cq.Workplane("XY").add(tool))
+            .cut(cq.Workplane("XY").add(engrave_world))
         )
         out = cut_wp.solids().vals()
         return out[0] if out else body
     except Exception as e:
         print(f"[top legend] {symbol!r} engraving failed: {e}")
         return body
-
 
 
 def _fuse_and_fillet_stem_cap_root(body: cq.Solid,
