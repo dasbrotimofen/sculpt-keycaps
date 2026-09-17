@@ -140,7 +140,7 @@ KEY_HEIGHT: List[List[Optional[float]]] = [
     [15.40, 12.90, 7.90, 5.70, 11.90, 15.40, 0.00],  # row 1
     [14.80, 12.30, 7.00, 5.00, 11.30, 14.80, 0.00],  # row 2 / home-ish
     [17.00, 15.00, 10.00, 8.00, 14.00, 17.00, 20.00],  # row 3
-    [20.00, 18.00, 13.00, 11.50, 0.00, 0.00, 0.00],  # row 4 left: blank, [, ], blank, Alt
+    [20.00, 18.00, 13.00, 11.50, 0.00, 0.00, 0.00],  # row 4 left: C, [, ], gap, Alt; col 6 disabled
 ]
 
 
@@ -167,7 +167,7 @@ INCLUDE_FN_ROW = False
 # - approximately levels the nominal top-face plane to the build plate
 # - creates NO CAD support structures; let the slicer generate supports
 FDM_MODE = False
-FDM_FLIP_TOP_DOWN = True
+FDM_FLIP_TOP_DOWN = False
 #FDM_FLIP_TOP_DOWN = False
 FDM_LEVEL_TOP = True
 
@@ -187,19 +187,19 @@ HOMING_BUMP_ENABLED = True
 if FDM_MODE:
     TOP_LEGEND_FONT = "DejaVu Sans:style=Bold"
     TOP_LEGEND_SIZE = 5.2
-    TOP_LEGEND_DEPTH = 0.30
+    TOP_LEGEND_DEPTH = 0.05
 else:
     TOP_LEGEND_FONT = "Arial"
     TOP_LEGEND_SIZE = 4.2
-    TOP_LEGEND_DEPTH = 0.12
+    TOP_LEGEND_DEPTH = 0.05
 
 # Fast preview controls for CQ-Editor.
 # "full" = whole hand
 # "row"  = one matrix row
 # "key"  = one matrix key
 # "thumbs" = thumb cluster only
-PREVIEW_MODE = "thumbs"
-PREVIEW_ROW = 4
+PREVIEW_MODE = "row"
+PREVIEW_ROW = 0
 # PREVIEW_COL = 3 only when key preview is desired. Otherwise, it can be None.
 
 # Only used when PREVIEW_MODE == "key".
@@ -209,9 +209,12 @@ PREVIEW_COL = None
 # -----------------------------------------------------------------------------
 # JLC connected-parts options (RESIN mode only)
 # -----------------------------------------------------------------------------
-# Connect only the sacrificial resin support structures within each physical row.
+# JLC_SERVICE_MODE removes all modeled resin print supports; JLC adds those itself.
+# JLC_CONNECT_SUPPORTS keeps only sacrificial breakaway bars between bare keycaps
+# within each physical row so the row can still be submitted as one connected shell.
 # Different rows remain separate shells. The thumb cluster is its own group.
-JLC_CONNECT_SUPPORTS = True
+JLC_SERVICE_MODE = True              # Bare keycaps: JLC adds/removes print supports.
+JLC_CONNECT_SUPPORTS = False          # Keep only row-to-row breakaway connectors.
 JLC_CONNECTOR_WIDTH = 2.0             # mm; >1.5 mm per JLC connected-part rule.
 JLC_CONNECTOR_HEIGHT = 2.0            # mm; connector thickness in Z.
 JLC_CONNECTOR_OVERLAP = 2.0           # mm overlap into each support structure.
@@ -1998,10 +2001,9 @@ def build_keycap(
 
 
     kb_h, sb_h = boot
-    if FDM_MODE:
-        # The upstream boot values intentionally lift the printable geometry
-        # so sacrificial support structures can be generated underneath.
-        # For FDM, start both the cap shell and MX stem directly at Z=0.
+    if FDM_MODE or JLC_SERVICE_MODE:
+        # FDM and JLC service-bureau mode use bare keycaps.
+        # Do not lift geometry for the upstream sacrificial resin supports.
         kb_h = 0.0
         sb_h = 0.0
 
@@ -2011,7 +2013,7 @@ def build_keycap(
     # Ergohaven's upstream generator includes sacrificial "boot"
     # structures intended to support the cap/stem during printing.
     # They are omitted in FDM_MODE; slicer-generated supports can be used instead.
-    if not FDM_MODE:
+    if not FDM_MODE and not JLC_SERVICE_MODE:
         with _trace_block("build_keycap.stem_boot_build"):
             sb = make_stem_boot(sc, lift=sb_h, support_top_thin=kc.support_top_thin)
         if sb is not None:
@@ -2092,10 +2094,10 @@ def build_keycap(
     parts.append(body)
 
 
-    # Lower wedge/tine/foot geometry is part of the upstream
-    # sacrificial print-support system. Keep it for resin/upstream behavior,
-    # omit it for FDM.
-    if not FDM_MODE:
+    # Lower wedge/tine/foot geometry is part of the upstream sacrificial
+    # print-support system. Omit it for FDM and for JLC service-bureau mode;
+    # JLC will add and remove its own printing supports.
+    if not FDM_MODE and not JLC_SERVICE_MODE:
         th_w = kc.base_width + kc.base_r * 2.0
         tw_w = th_w * max(unit, 1.0)
         hx_w = tw_w / 2.0
@@ -2386,14 +2388,14 @@ def _build_hand_solids(
         ["T", "Q",     "W",     "E",     "R",    "T",     ""],
         ["MM",   "A",     "S",     "D",     "F",    "G",     ""],
         ["S",    "Y",     "X",     "C",     "V",    "B",     ""],
-        ["C",        "[",     "]",     "",      "A",  "",      ""],
+        ["C",        "[",     "]",     "A",      "",  "",      ""],
     ]
 
     _TOP_LEGENDS_RIGHT = [
         ["",        "6",     "7",     "8",     "9",    "0",     "BS"],
         ["",        "Z",     "U",     "I",     "O",    "P",     "Ü"],
         ["",        "H",     "J",     "K",     "L",    "Ö",     "Ä"],
-        ["",        "N",     "M",     "",     ".",    "-",     "$"],
+        ["",        "N",     "M",     ",",     ".",    "-",     "$"],
         ["",        "",      "",      "",      "",     "?",      "AG"],
     ]
 
@@ -2541,7 +2543,7 @@ def _build_hand_solids(
 
 def _make_jlc_connector_bar(p1: Tuple[float, float],
                             p2: Tuple[float, float]) -> cq.Solid:
-    """Create a sacrificial rectangular connector between two support centers."""
+    """Create a sacrificial rectangular breakaway bar between two keycap centers."""
     x1, y1 = p1
     x2, y2 = p2
     dx, dy = x2 - x1, y2 - y1
@@ -2578,7 +2580,7 @@ def _make_jlc_connector_bar(p1: Tuple[float, float],
 
 def _jlc_connect_support_rows(solids: List[cq.Solid], row_groups) -> List[cq.Solid]:
     """
-    Connect sacrificial resin support structures ONLY within each physical row.
+    Connect bare keycaps ONLY within each physical row using breakaway bars.
 
     Matrix rows 0..4 stay independent from one another. The thumb cluster is
     also independent. Within a row, adjacent generated keys are joined from

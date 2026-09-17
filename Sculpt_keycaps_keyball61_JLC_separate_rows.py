@@ -140,7 +140,7 @@ KEY_HEIGHT: List[List[Optional[float]]] = [
     [15.40, 12.90, 7.90, 5.70, 11.90, 15.40, 0.00],  # row 1
     [14.80, 12.30, 7.00, 5.00, 11.30, 14.80, 0.00],  # row 2 / home-ish
     [17.00, 15.00, 10.00, 8.00, 14.00, 17.00, 20.00],  # row 3
-    [20.00, 18.00, 13.00, 11.50, 0.00, 0.00, 0.00],  # row 4 left: blank, [, ], blank, Alt
+    [20.00, 18.00, 13.00, 11.50, 0.00, 0.00, 0.00],  # row 4 left: C, [, ], gap, Alt; col 6 disabled
 ]
 
 
@@ -167,7 +167,7 @@ INCLUDE_FN_ROW = False
 # - approximately levels the nominal top-face plane to the build plate
 # - creates NO CAD support structures; let the slicer generate supports
 FDM_MODE = False
-FDM_FLIP_TOP_DOWN = True
+FDM_FLIP_TOP_DOWN = False
 #FDM_FLIP_TOP_DOWN = False
 FDM_LEVEL_TOP = True
 
@@ -187,31 +187,39 @@ HOMING_BUMP_ENABLED = True
 if FDM_MODE:
     TOP_LEGEND_FONT = "DejaVu Sans:style=Bold"
     TOP_LEGEND_SIZE = 5.2
-    TOP_LEGEND_DEPTH = 0.30
+    TOP_LEGEND_DEPTH = 0.20
 else:
     TOP_LEGEND_FONT = "Arial"
     TOP_LEGEND_SIZE = 4.2
-    TOP_LEGEND_DEPTH = 0.12
+    TOP_LEGEND_DEPTH = 0.20
 
 # Fast preview controls for CQ-Editor.
 # "full" = whole hand
 # "row"  = one matrix row
 # "key"  = one matrix key
 # "thumbs" = thumb cluster only
-PREVIEW_MODE = "thumbs"
-PREVIEW_ROW = 4
+PREVIEW_MODE = "row"
+PREVIEW_ROW = 0
 # PREVIEW_COL = 3 only when key preview is desired. Otherwise, it can be None.
 
 # Only used when PREVIEW_MODE == "key".
 # It can be None for "row" or "full".
 PREVIEW_COL = None
 
+# Show every matrix row and the thumb cluster as separate CQ-Editor objects
+# in a single run. This avoids changing PREVIEW_ROW and rerunning six times.
+# Works with MODE = "left", "right", or "both".
+SEPARATE_ROW_OBJECTS = True
+
 # -----------------------------------------------------------------------------
 # JLC connected-parts options (RESIN mode only)
 # -----------------------------------------------------------------------------
-# Connect only the sacrificial resin support structures within each physical row.
+# JLC_SERVICE_MODE removes all modeled resin print supports; JLC adds those itself.
+# JLC_CONNECT_SUPPORTS keeps only sacrificial breakaway bars between bare keycaps
+# within each physical row so the row can still be submitted as one connected shell.
 # Different rows remain separate shells. The thumb cluster is its own group.
-JLC_CONNECT_SUPPORTS = True
+JLC_SERVICE_MODE = True              # Bare keycaps: JLC adds/removes print supports.
+JLC_CONNECT_SUPPORTS = False          # Keep only row-to-row breakaway connectors.
 JLC_CONNECTOR_WIDTH = 2.0             # mm; >1.5 mm per JLC connected-part rule.
 JLC_CONNECTOR_HEIGHT = 2.0            # mm; connector thickness in Z.
 JLC_CONNECTOR_OVERLAP = 2.0           # mm overlap into each support structure.
@@ -1806,71 +1814,111 @@ def _engrave_top_legend(
     face_tilt: float,
 ) -> cq.Solid:
     """
-    Engrave a centered legend into the actual concave top surface.
+    Engrave the legend to approximately TOP_LEGEND_DEPTH measured along the
+    local top-face Z direction, including on a concave/dimpled top.
 
-    The cutter starts at the nominal top plane and reaches through the dish
-    only far enough to enter the real surface by TOP_LEGEND_DEPTH.
-    This keeps the complete glyph visible while avoiding the previous
-    excessive cutter depth that could turn closed letters into through-holes.
+    Instead of making a very deep text cutter that merely reaches through the
+    dish, create a thin surface band from the actual finished keycap body:
+
+        surface band = body - body shifted inward by TOP_LEGEND_DEPTH
+
+    The text is then intersected with that band before cutting.  Therefore the
+    text can only remove the requested outer layer of the finished top surface.
     """
-    if not TOP_LEGENDS or not symbol:
+    if not TOP_LEGENDS or not symbol or TOP_LEGEND_DEPTH <= 0.0:
         return body
 
     try:
-        # Need to traverse the dish depth before reaching the center surface.
-        # Only a tiny boolean overlap is added beyond the requested engraving.
-        cutter_depth = max(
-            0.15,
-            abs(dimple_depth) + TOP_LEGEND_DEPTH + 0.05
-        )
-
-        txt_wp = cq.Workplane("XY").text(
-            symbol,
-            TOP_LEGEND_SIZE,
-            -cutter_depth,
-            halign="center",
-            valign="center",
-            font=TOP_LEGEND_FONT,
-        )
-        txt_solids = txt_wp.solids().vals()
-        if not txt_solids:
-            return body
-
         ai = compute_angle_index(n)
         off = adjust_offsets(n, face_offset, ai)
         ang = adjust_angles(n, face_angle, ai)
         if abs(face_tilt) > 1e-6:
             ang = (ang[0] + face_tilt, ang[1], ang[2])
 
-        # Start just above the nominal top surface.
+        # Transform the finished keycap into the local top-face frame.  In this
+        # frame +Z points outward from the nominal key face and -Z points into
+        # the keycap.
         top_origin = (
             off[0],
             off[1],
-            off[2] + kb_h + 0.03
+            off[2] + kb_h,
         )
-
-        trsf = _compose_trsf(
+        face_trsf = _compose_trsf(
             ang[0], ang[1], ang[2],
             top_origin[0], top_origin[1], top_origin[2]
         )
+        local_body = _transform_solid_with_trsf(body, face_trsf.Inverted())
 
-        cutters = [
-            cq.Solid(BRepBuilderAPI_Transform(s.wrapped, trsf, True).Shape())
-            for s in txt_solids
-        ]
-        tool = cutters[0] if len(cutters) == 1 else cq.Compound.makeCompound(cutters)
+        # Make a TOP_LEGEND_DEPTH-thick skin of the ACTUAL finished body.
+        # The tiny epsilon only helps the boolean and is not added to the
+        # requested engraving depth.
+        depth = float(TOP_LEGEND_DEPTH)
+        shifted_body = translate_solid(local_body, 0.0, 0.0, -depth)
+        band_wp = (
+            cq.Workplane("XY")
+            .add(local_body)
+            .cut(cq.Workplane("XY").add(shifted_body))
+        )
+        band_solids = band_wp.solids().vals()
+        if not band_solids:
+            return body
+        band = band_solids[0] if len(band_solids) == 1 else cq.Compound.makeCompound(band_solids)
+
+        # Tall text prism: its total height is deliberately unrelated to the
+        # engraving depth.  The surface-band intersection below limits the cut
+        # to TOP_LEGEND_DEPTH.
+        span = max(4.0, abs(dimple_depth) + depth + 2.0)
+        txt_wp = (
+            cq.Workplane("XY")
+            .workplane(offset=1.0)
+            .text(
+                symbol,
+                TOP_LEGEND_SIZE,
+                -span,
+                halign="center",
+                valign="center",
+                font=TOP_LEGEND_FONT,
+            )
+        )
+        txt_solids = txt_wp.solids().vals()
+        if not txt_solids:
+            return body
+        txt_tool = txt_solids[0] if len(txt_solids) == 1 else cq.Compound.makeCompound(txt_solids)
+
+        # Restrict the text cutter to the thin outer surface band only.
+        engrave_wp = (
+            cq.Workplane("XY")
+            .add(txt_tool)
+            .intersect(cq.Workplane("XY").add(band))
+        )
+        engrave_solids = engrave_wp.solids().vals()
+        if not engrave_solids:
+            return body
+        engrave_local = engrave_solids[0] if len(engrave_solids) == 1 else cq.Compound.makeCompound(engrave_solids)
+
+        # Transform the limited cutter back to world coordinates and subtract.
+        if isinstance(engrave_local, cq.Compound):
+            world_cutters = [
+                _transform_solid_with_trsf(s, face_trsf)
+                for s in engrave_local.Solids()
+            ]
+            engrave_world = (
+                world_cutters[0] if len(world_cutters) == 1
+                else cq.Compound.makeCompound(world_cutters)
+            )
+        else:
+            engrave_world = _transform_solid_with_trsf(engrave_local, face_trsf)
 
         cut_wp = (
             cq.Workplane("XY")
             .add(body)
-            .cut(cq.Workplane("XY").add(tool))
+            .cut(cq.Workplane("XY").add(engrave_world))
         )
         out = cut_wp.solids().vals()
         return out[0] if out else body
     except Exception as e:
         print(f"[top legend] {symbol!r} engraving failed: {e}")
         return body
-
 
 
 def _fuse_and_fillet_stem_cap_root(body: cq.Solid,
@@ -1998,10 +2046,9 @@ def build_keycap(
 
 
     kb_h, sb_h = boot
-    if FDM_MODE:
-        # The upstream boot values intentionally lift the printable geometry
-        # so sacrificial support structures can be generated underneath.
-        # For FDM, start both the cap shell and MX stem directly at Z=0.
+    if FDM_MODE or JLC_SERVICE_MODE:
+        # FDM and JLC service-bureau mode use bare keycaps.
+        # Do not lift geometry for the upstream sacrificial resin supports.
         kb_h = 0.0
         sb_h = 0.0
 
@@ -2011,7 +2058,7 @@ def build_keycap(
     # Ergohaven's upstream generator includes sacrificial "boot"
     # structures intended to support the cap/stem during printing.
     # They are omitted in FDM_MODE; slicer-generated supports can be used instead.
-    if not FDM_MODE:
+    if not FDM_MODE and not JLC_SERVICE_MODE:
         with _trace_block("build_keycap.stem_boot_build"):
             sb = make_stem_boot(sc, lift=sb_h, support_top_thin=kc.support_top_thin)
         if sb is not None:
@@ -2092,10 +2139,10 @@ def build_keycap(
     parts.append(body)
 
 
-    # Lower wedge/tine/foot geometry is part of the upstream
-    # sacrificial print-support system. Keep it for resin/upstream behavior,
-    # omit it for FDM.
-    if not FDM_MODE:
+    # Lower wedge/tine/foot geometry is part of the upstream sacrificial
+    # print-support system. Omit it for FDM and for JLC service-bureau mode;
+    # JLC will add and remove its own printing supports.
+    if not FDM_MODE and not JLC_SERVICE_MODE:
         th_w = kc.base_width + kc.base_r * 2.0
         tw_w = th_w * max(unit, 1.0)
         hx_w = tw_w / 2.0
@@ -2386,14 +2433,14 @@ def _build_hand_solids(
         ["T", "Q",     "W",     "E",     "R",    "T",     ""],
         ["MM",   "A",     "S",     "D",     "F",    "G",     ""],
         ["S",    "Y",     "X",     "C",     "V",    "B",     ""],
-        ["C",        "[",     "]",     "",      "A",  "",      ""],
+        ["C",        "[",     "]",     "A",      "",  "",      ""],
     ]
 
     _TOP_LEGENDS_RIGHT = [
         ["",        "6",     "7",     "8",     "9",    "0",     "BS"],
         ["",        "Z",     "U",     "I",     "O",    "P",     "Ü"],
         ["",        "H",     "J",     "K",     "L",    "Ö",     "Ä"],
-        ["",        "N",     "M",     "",     ".",    "-",     "$"],
+        ["",        "N",     "M",     ",",     ".",    "-",     "$"],
         ["",        "",      "",      "",      "",     "?",      "AG"],
     ]
 
@@ -2541,7 +2588,7 @@ def _build_hand_solids(
 
 def _make_jlc_connector_bar(p1: Tuple[float, float],
                             p2: Tuple[float, float]) -> cq.Solid:
-    """Create a sacrificial rectangular connector between two support centers."""
+    """Create a sacrificial rectangular breakaway bar between two keycap centers."""
     x1, y1 = p1
     x2, y2 = p2
     dx, dy = x2 - x1, y2 - y1
@@ -2578,7 +2625,7 @@ def _make_jlc_connector_bar(p1: Tuple[float, float],
 
 def _jlc_connect_support_rows(solids: List[cq.Solid], row_groups) -> List[cq.Solid]:
     """
-    Connect sacrificial resin support structures ONLY within each physical row.
+    Connect bare keycaps ONLY within each physical row using breakaway bars.
 
     Matrix rows 0..4 stay independent from one another. The thumb cluster is
     also independent. Within a row, adjacent generated keys are joined from
@@ -2654,6 +2701,64 @@ def build_layout(
             all_solids = [translate_solid(s, 0, 0, -min_z) for s in all_solids]
     return cq.Workplane("XY").newObject([cq.Compound.makeCompound(all_solids)])
     return cq.Workplane("XY")
+
+
+
+def build_layout_row_objects(
+    sidemask: int,
+    include_fn: bool = False,
+    kc: KeycapConfig = KC,
+    sc: StemConfig = SC,
+    lc: LayoutConfig = LC,
+    key_angles: Optional[List[List[Tuple[float, float]]]] = None,
+    key_height: Optional[List[List[Optional[float]]]] = None,
+    key_face_tilt: Optional[List[List[float]]] = None,
+    thumb_sweep: Optional[List[Tuple[float, float]]] = None,
+    thumb_face_tilt: Optional[List[float]] = None,
+):
+    """
+    Build matrix rows 0..4 plus the thumb cluster as independent Workplanes.
+
+    The normal PREVIEW_MODE / PREVIEW_ROW settings are restored afterwards.
+    JLC row connectors, when enabled, are generated independently inside each row.
+    """
+    global PREVIEW_MODE, PREVIEW_ROW, PREVIEW_COL
+
+    old_mode = PREVIEW_MODE
+    old_row = PREVIEW_ROW
+    old_col = PREVIEW_COL
+
+    objects = {}
+    try:
+        PREVIEW_COL = None
+
+        for row in range(lc.rows):
+            PREVIEW_MODE = "row"
+            PREVIEW_ROW = row
+            objects[f"row_{row}"] = build_layout(
+                sidemask, include_fn, kc, sc, lc,
+                key_angles=key_angles,
+                key_height=key_height,
+                key_face_tilt=key_face_tilt,
+                thumb_sweep=thumb_sweep,
+                thumb_face_tilt=thumb_face_tilt,
+            )
+
+        PREVIEW_MODE = "thumbs"
+        objects["thumbs"] = build_layout(
+            sidemask, include_fn, kc, sc, lc,
+            key_angles=key_angles,
+            key_height=key_height,
+            key_face_tilt=key_face_tilt,
+            thumb_sweep=thumb_sweep,
+            thumb_face_tilt=thumb_face_tilt,
+        )
+    finally:
+        PREVIEW_MODE = old_mode
+        PREVIEW_ROW = old_row
+        PREVIEW_COL = old_col
+
+    return objects
 
 
 def build_test_keycap(kc: KeycapConfig = KC, sc: StemConfig = SC,
@@ -2735,19 +2840,56 @@ if _is_cq_editor():
             _show(_result, "test_keycap")
         elif MODE == "left":
             print("[Ergohaven] building left hand layout...")
-            _result = build_layout(1, INCLUDE_FN_ROW, _kc, key_angles=KEY_ANGLES, key_height=KEY_HEIGHT, key_face_tilt=KEY_FACE_TILT, thumb_sweep=THUMB_SWEEP, thumb_face_tilt=THUMB_FACE_TILT)
-            print(f"[Ergohaven] left hand built OK, solids: {len(_result.solids().vals())}")
-            _show(_result, "left_hand")
+            if SEPARATE_ROW_OBJECTS:
+                _row_objects = build_layout_row_objects(
+                    1, INCLUDE_FN_ROW, _kc,
+                    key_angles=KEY_ANGLES, key_height=KEY_HEIGHT,
+                    key_face_tilt=KEY_FACE_TILT,
+                    thumb_sweep=THUMB_SWEEP,
+                    thumb_face_tilt=THUMB_FACE_TILT,
+                )
+                for _name, _obj in _row_objects.items():
+                    _show(_obj, f"left_{_name}")
+                print("[Ergohaven] left rows built as separate objects: row_0..row_4 + thumbs")
+            else:
+                _result = build_layout(1, INCLUDE_FN_ROW, _kc, key_angles=KEY_ANGLES, key_height=KEY_HEIGHT, key_face_tilt=KEY_FACE_TILT, thumb_sweep=THUMB_SWEEP, thumb_face_tilt=THUMB_FACE_TILT)
+                print(f"[Ergohaven] left hand built OK, solids: {len(_result.solids().vals())}")
+                _show(_result, "left_hand")
         elif MODE == "right":
             print("[Ergohaven] building right hand layout...")
-            _result = build_layout(2, INCLUDE_FN_ROW, _kc, key_angles=KEY_ANGLES, key_height=KEY_HEIGHT, key_face_tilt=KEY_FACE_TILT, thumb_sweep=THUMB_SWEEP, thumb_face_tilt=THUMB_FACE_TILT)
-            print(f"[Ergohaven] right hand built OK, solids: {len(_result.solids().vals())}")
-            _show(_result, "right_hand")
+            if SEPARATE_ROW_OBJECTS:
+                _row_objects = build_layout_row_objects(
+                    2, INCLUDE_FN_ROW, _kc,
+                    key_angles=KEY_ANGLES, key_height=KEY_HEIGHT,
+                    key_face_tilt=KEY_FACE_TILT,
+                    thumb_sweep=THUMB_SWEEP,
+                    thumb_face_tilt=THUMB_FACE_TILT,
+                )
+                for _name, _obj in _row_objects.items():
+                    _show(_obj, f"right_{_name}")
+                print("[Ergohaven] right rows built as separate objects: row_0..row_4 + thumbs")
+            else:
+                _result = build_layout(2, INCLUDE_FN_ROW, _kc, key_angles=KEY_ANGLES, key_height=KEY_HEIGHT, key_face_tilt=KEY_FACE_TILT, thumb_sweep=THUMB_SWEEP, thumb_face_tilt=THUMB_FACE_TILT)
+                print(f"[Ergohaven] right hand built OK, solids: {len(_result.solids().vals())}")
+                _show(_result, "right_hand")
         elif MODE == "both":
             print("[Ergohaven] building both hands layout...")
-            _result = build_layout(3, INCLUDE_FN_ROW, _kc, key_angles=KEY_ANGLES, key_height=KEY_HEIGHT, key_face_tilt=KEY_FACE_TILT, thumb_sweep=THUMB_SWEEP, thumb_face_tilt=THUMB_FACE_TILT)
-            print(f"[Ergohaven] both hands built OK, solids: {len(_result.solids().vals())}")
-            _show(_result, "ergohaven")
+            if SEPARATE_ROW_OBJECTS:
+                for _side_name, _mask in (("left", 1), ("right", 2)):
+                    _row_objects = build_layout_row_objects(
+                        _mask, INCLUDE_FN_ROW, _kc,
+                        key_angles=KEY_ANGLES, key_height=KEY_HEIGHT,
+                        key_face_tilt=KEY_FACE_TILT,
+                        thumb_sweep=THUMB_SWEEP,
+                        thumb_face_tilt=THUMB_FACE_TILT,
+                    )
+                    for _name, _obj in _row_objects.items():
+                        _show(_obj, f"{_side_name}_{_name}")
+                print("[Ergohaven] both hands built as separate row objects")
+            else:
+                _result = build_layout(3, INCLUDE_FN_ROW, _kc, key_angles=KEY_ANGLES, key_height=KEY_HEIGHT, key_face_tilt=KEY_FACE_TILT, thumb_sweep=THUMB_SWEEP, thumb_face_tilt=THUMB_FACE_TILT)
+                print(f"[Ergohaven] both hands built OK, solids: {len(_result.solids().vals())}")
+                _show(_result, "ergohaven")
         else:
             print(f"[Ergohaven] Unknown MODE: {MODE!r}")
     except Exception as _e:
